@@ -180,7 +180,7 @@ then
     for backup_dirs in $backup_directories
     do
         echo "--> $backup_dirs" | tee -a $log_file
-            dir_name=`echo $backup_dirs | cut -d / -f2- | sed 's/\//-/g'`
+            dir_name=$(echo $backup_dirs | cut -d / -f2- | sed 's/\//-/g')
         if [[ -d ${backup_dirs}/.git ]]; then
             tar -cjf $backup_path/Backup/$path_date/$dir_name.tar.bz2 -X ${backup_dirs}/.gitignore $backup_dirs/ > /dev/null 2> /dev/null
         else
@@ -214,7 +214,7 @@ then
     # Creating ~/.pgpass for PostgreSQL password
     # PostgreSQL does not support inline password
     # Know better solution? Let me know.
-    USERNAME=`whoami`
+    USERNAME=$(whoami)
     CUR_DATE=$(date +"%Y-%m-%d-%H-%M-%S")
     if [ $USERNAME = "root" ]
     then
@@ -262,12 +262,12 @@ then
     echo -e "\n ${color}--- $date_now Docker Mariadb/MySQL backup enabled, backing up: \n${nc}"
     echo "$date_now Docker MySQL backup enabled, backing up" >> $log_file
     for docker_mysql_container in $docker_mysql_containers
-        do 
-            docker_mysql_container_id=`echo $ocker_mysql_container | awk -F":::" '{print $1}'`
-            docker_mysql_container_name=`docker ps --filter "id=$docker_mysql_container_id" | awk '{print $11}'`
-            docker_mysql_user=`echo $ocker_mysql_container | awk -F":::" '{print $2}'`
-            docker_mysql_pass=`echo $ocker_mysql_container | awk -F":::" '{print $3}'`
-            docker_mysql_database=`echo $ocker_mysql_container | awk -F":::" '{print $4}'`
+        do
+            docker_mysql_container_id=$(echo $ocker_mysql_container | awk -F":::" '{print $1}')
+            docker_mysql_container_name=$(docker ps --filter "id=$docker_mysql_container_id" | awk '{print $11}')
+            docker_mysql_user=$(echo $ocker_mysql_container | awk -F":::" '{print $2}')
+            docker_mysql_pass=$(echo $ocker_mysql_container | awk -F":::" '{print $3}')
+            docker_mysql_database=$(echo $ocker_mysql_container | awk -F":::" '{print $4}')
             docker exec $docker_mysql_container_id /usr/bin/mysqldump -u $docker_mysql_user --password=$docker_mysql_pass $docker_mysql_database | gzip -9 > $backup_path/Backup/$path_date/Docker_MySQL_${docker_mysql_container_name}_Dump_$path_date.sql.gz | tee -a $log_file
     if [ $? -eq 0 ]
     then
@@ -339,7 +339,7 @@ sleep 1
 # Upload to FTP server
 if [ $ftp_enable = "yes" ]
 then
-    if [ `which curl` ]
+    if [ $(which curl) ]
     then
         echo -e "\n ${color}--- $date_now Uploading backup archive to FTP server $ftp_server \n${nc}"
         echo "$date_now Uploading backup archive to FTP server $ftp_server" >> $log_file
@@ -362,7 +362,7 @@ fi
 # Upload archive file to MEGA.nz
 if [ $mega_enable = "yes" ]
 then
-    if [ `which megaput` ]
+    if [ $(which megaput) ]
     then
         echo -e "\n ${color}--- $date_now Uploading backup archive to MEGA.nz \n${nc}"
         echo "$date_now Uploading backup archive to MEGA.nz" >> $log_file

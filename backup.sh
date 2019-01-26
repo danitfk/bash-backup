@@ -131,25 +131,26 @@ hostname=$(hostname -s)
 date_now=$(date +"%Y-%m-%d %H:%M:%S")
 
 # Checking lock file
+function check_lockfile {
 test -r /var/backup_lock
 if [ $? -eq 0 ];then
-    echo -e "\n ${color}--- $date_now There is another backup process. \n${nc}"
-    echo "$date_now There is another backup process." >> $log_file
-    echo -e "\n ${color}--- $date_now If not, run the script with --fresh argument. \n${nc}"
+	echo -e "\n ${color}--- $date_now Another lockfile exists. \n${nc}"
+	echo "$date_now Seems there is an another backup process." >> $log_file
+	echo -e "\n ${color}--- $date_now If not, run the script with --fresh argument. \n${nc}"
     exit
 fi
+}
 
-touch /var/backup_lock 2> /dev/null
-path_date=$(hostname -s)_$(date +"%Y-%m-%d-%H-%M-%S")
-mkdir -p $backup_path/Backup/$path_date 2>> $log_file
-echo -e "\n ${color}--- $date_now Backup started. \n${nc}"
-echo "$date_now Backup started." >> $log_file
-
-sleep 1
+function create_lockfile {
+	touch /var/backup_lock 2> /dev/null
+	path_date=$(hostname -s)_$(date +"%Y-%m-%d-%H-%M-%S")
+	mkdir -p $backup_path/Backup/$path_date 2>> $log_file
+	echo -e "\n ${color}--- $date_now Backup started. \n${nc}"
+	echo "$date_now Backup started." >> $log_file
+}
 
 # Backing up the files
-if [ $backup_files_enable = "yes" ]
-then
+function backup_files {
     echo -e "\n ${color}--- $date_now Backing up files \n${nc}"
     echo "$date_now Backing up files" >> $log_file
     mkdir $backup_path/Backup/$path_date/custom_files | tee -a $log_file
@@ -158,59 +159,49 @@ then
         echo "--> $backup_custom_files" | tee -a $log_file
         cp $backup_files $backup_path/Backup/$path_date/custom_files/ 2>> $log_file
     done
-    echo
-fi
 
-if [ $iptables_backup = "yes" ]
-then
-        echo -e "\n ${color}--- $date_now Backing up iptables rules \n${nc}"
-        echo "$date_now Backing up iptables rules" >> $log_file
-    iptables-save >> $backup_path/Backup/$path_date/custom_files/iptables-save
-        echo
-fi
+}
 
+function backup_iptables {
+	echo -e "\n ${color}--- $date_now Backing up iptables rules \n${nc}"
+	echo "$date_now Backing up iptables rules" >> $log_file
+	iptables-save >> $backup_path/Backup/$path_date/custom_files/iptables-save
+	echo
+}
 
-sleep 1
+function backup_dir {
+	echo -e "\n ${color}--- $date_now Backing up directories \n${nc}"
+	echo "$date_now Backing up directories" >> $log_file
+	for backup_dirs in $backup_directories
+	do
+		echo "--> $backup_dirs" | tee -a $log_file
+		dir_name=$(echo $backup_dirs | cut -d / -f2- | sed 's/\//-/g')
+		if [[ -d ${backup_dirs}/.git ]]; then
+			tar -cjf $backup_path/Backup/$path_date/$dir_name.tar.bz2 -X ${backup_dirs}/.gitignore $backup_dirs/ > /dev/null 2> /dev/null
+		else
+			tar -cjf $backup_path/Backup/$path_date/$dir_name.tar.bz2 $backup_dirs/ > /dev/null 2> /dev/null
+		fi
+	done
+	echo
 
-# Backing up the directories
-if [ $backup_dir_enable = "yes" ]
-then
-    echo -e "\n ${color}--- $date_now Backing up directories \n${nc}"
-    echo "$date_now Backing up directories" >> $log_file
-    for backup_dirs in $backup_directories
-    do
-        echo "--> $backup_dirs" | tee -a $log_file
-            dir_name=$(echo $backup_dirs | cut -d / -f2- | sed 's/\//-/g')
-        if [[ -d ${backup_dirs}/.git ]]; then
-            tar -cjf $backup_path/Backup/$path_date/$dir_name.tar.bz2 -X ${backup_dirs}/.gitignore $backup_dirs/ > /dev/null 2> /dev/null
-        else
-            tar -cjf $backup_path/Backup/$path_date/$dir_name.tar.bz2 $backup_dirs/ > /dev/null 2> /dev/null
-        fi
-    done
-    echo
-fi
+}
 
-sleep 1
+function backup_mysql {
 
-# MySQL backup
-if [ $mysql_backup = "yes" ]
-then
     echo -e "\n ${color}--- $date_now MySQL backup enabled, backing up: \n${nc}"
     echo "$date_now MySQL backup enabled, backing up" >> $log_file
     # Using ionice for MySQL dump
-    ionice -c 3 mysqldump -u $mysql_user -p$mysql_pass --events --all-databases | gzip -9 > $backup_path/Backup/$path_date/MySQL_Full_Dump_$path_date.sql.gz | tee -a $log_file
+    ionice -c 3 mysqldump -u $mysql_user -p$mysql_pass --events --all-databases | gzip -9 > $backup_path/Backup/$path_date/MySQL_Full_Dump_$path_date.sql.gz | tee -a $lo$
     if [ $? -eq 0 ]
     then
         echo -e "\n ${color}--- $date_now MySQL backup completed. \n${nc}"
         echo "$date_now Backing up files" >> $log_file
     fi
-fi
 
-sleep 1
+}
 
-# PostgreSQL backup
-if [ $postgres_backup = "yes" ]
-then
+function backup_postgres {
+
     # Creating ~/.pgpass for PostgreSQL password
     # PostgreSQL does not support inline password
     # Know better solution? Let me know.
@@ -234,13 +225,11 @@ then
         echo -e "\n ${color}--- $date_now PostgreSQL backup completed. \n${nc}"
         echo "$date_now PostgreSQL backup completed" >> $log_file
     fi
-fi
 
-sleep 1
+}
 
-# MongoDB backup
-if [ $mongo_backup = "yes" ]
-then
+function backup_mongo {
+
     echo -e "\n ${color}--- $date_now MongoDB backup enabled, backing up: \n${nc}"
     echo "$date_now MongoDB backup enabled, backing up" >> $log_file
     # Using ionice for MongoDB dump
@@ -250,15 +239,11 @@ then
         echo -e "\n ${color}--- $date_now MongoDB backup completed. \n${nc}"
         echo "$date_now MongoDB backup completed" >> $log_file
     fi
-fi
 
-sleep 1
+}
 
-# Docker Backup 
-# Mariadb or Mysql backup 
+function backup_docker_mysql {
 
-if [ $docker_mysql_backup = "yes" ]
-then
     echo -e "\n ${color}--- $date_now Docker Mariadb/MySQL backup enabled, backing up: \n${nc}"
     echo "$date_now Docker MySQL backup enabled, backing up" >> $log_file
     for docker_mysql_container in $docker_mysql_containers
@@ -268,13 +253,82 @@ then
             docker_mysql_user=$(echo $ocker_mysql_container | awk -F":::" '{print $2}')
             docker_mysql_pass=$(echo $ocker_mysql_container | awk -F":::" '{print $3}')
             docker_mysql_database=$(echo $ocker_mysql_container | awk -F":::" '{print $4}')
-            docker exec $docker_mysql_container_id /usr/bin/mysqldump -u $docker_mysql_user --password=$docker_mysql_pass $docker_mysql_database | gzip -9 > $backup_path/Backup/$path_date/Docker_MySQL_${docker_mysql_container_name}_Dump_$path_date.sql.gz | tee -a $log_file
+            docker exec $docker_mysql_container_id /usr/bin/mysqldump -u $docker_mysql_user --password=$docker_mysql_pass $docker_mysql_database | gzip -9 > $backup_path/Backup/$path_date/Docker_MySQL_${docker_mysql_container_name}_Dump_$path_date.sql.gz $
     if [ $? -eq 0 ]
     then
         echo -e "\n ${color}--- $date_now Docker Mariadb/MySQL backup completed. \n${nc}"
         echo "$date_now Docker Mariadb/MySQL backup completed" >> $log_file
     fi
     done
+
+}
+
+
+if [ $backup_files_enable = "yes" ]
+then
+
+	backup_files
+
+fi
+
+if [ $iptables_backup = "yes" ]
+then
+
+	backup_iptables
+
+fi
+
+
+sleep 1
+
+# Backing up the directories
+if [ $backup_dir_enable = "yes" ]
+then
+
+	backup_dir
+
+fi
+
+sleep 1
+
+# MySQL backup
+if [ $mysql_backup = "yes" ]
+then
+
+	backup_mysql
+
+fi
+
+sleep 1
+
+# PostgreSQL backup
+if [ $postgres_backup = "yes" ]
+then
+
+	backup_postgres
+
+fi
+
+sleep 1
+
+# MongoDB backup
+if [ $mongo_backup = "yes" ]
+then
+
+	backup_mongo
+
+fi
+
+sleep 1
+
+# Docker Backup
+# Mariadb or Mysql backup
+
+if [ $docker_mysql_backup = "yes" ]
+then
+
+	backup_docker_mysql
+
 fi
 
 
